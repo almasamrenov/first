@@ -27,8 +27,10 @@ func handleJSONRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req JsonRequest
 	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	var req map[string]interface{}
 	if err := decoder.Decode(&req); err != nil {
 		res := JsonResponse{
 			Status:  "400",
@@ -46,7 +48,26 @@ func handleJSONRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Println("Received message:", req.Message)
+	message, ok := req["message"].(string)
+	if !ok || message == "" {
+
+		res := JsonResponse{
+			Status:  "400",
+			Message: "Invalid JSON message",
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+
+		encoder := json.NewEncoder(w)
+		if err := encoder.Encode(res); err != nil {
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		return
+	}
+
+	fmt.Println("Received message:", message)
 
 	res := JsonResponse{
 		Status:  "success",
@@ -62,3 +83,4 @@ func handleJSONRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
