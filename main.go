@@ -4,74 +4,60 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+
+	"github.com/rs/cors"
 )
 
-type JsonRequest struct {
-	Message string `json:"message"`
+type PersonRequest struct {
+	Person struct {
+		Name     string `json:"name"`
+		Username string `json:"username"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	} `json:"person"`
 }
 
-type JsonResponse struct {
+
+type PersonResponse struct {
+	Status string `json:"status"`
+}
+
+type ErrorResponse struct {
 	Status  string `json:"status"`
 	Message string `json:"message"`
 }
 
 func main() {
-	http.HandleFunc("/json-endpoint", handleJSONRequest)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/person-endpoint", handlePersonRequest)
+
+	handler := cors.Default().Handler(mux)
+
 	fmt.Println("Server listening on :8080")
-	http.ListenAndServe(":8080", nil)
+	http.ListenAndServe(":8080", handler)
 }
 
-func handleJSONRequest(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-		return
+func handlePersonRequest(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodPost:
+		handlePersonPost(w, r)
+	default:
+		sendErrorResponse(w, "Invalid request method", http.StatusMethodNotAllowed)
 	}
+}
 
+func handlePersonPost(w http.ResponseWriter, r *http.Request) {
+	var req PersonRequest
 	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-
-	var req map[string]interface{}
 	if err := decoder.Decode(&req); err != nil {
-		res := JsonResponse{
-			Status:  "400",
-			Message: "Invalid JSON message",
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-
-		encoder := json.NewEncoder(w)
-		if err := encoder.Encode(res); err != nil {
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
+		sendErrorResponse(w, "Invalid JSON message", http.StatusBadRequest)
 		return
 	}
 
-	message, ok := req["message"].(string)
-	if !ok || message == "" {
+	fmt.Printf("Received POST request with Person data: %+v\n", req.Person)
 
-		res := JsonResponse{
-			Status:  "400",
-			Message: "Invalid JSON message",
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-
-		encoder := json.NewEncoder(w)
-		if err := encoder.Encode(res); err != nil {
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
-		return
-	}
-
-	fmt.Println("Received message:", message)
-
-	res := JsonResponse{
-		Status:  "success",
-		Message: "Data successfully received",
+	res := PersonResponse{
+		Status: "success",
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -79,8 +65,23 @@ func handleJSONRequest(w http.ResponseWriter, r *http.Request) {
 
 	encoder := json.NewEncoder(w)
 	if err := encoder.Encode(res); err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		sendErrorResponse(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 }
 
+
+func sendErrorResponse(w http.ResponseWriter, message string, statusCode int) {
+	errRes := ErrorResponse{
+		Status:  fmt.Sprintf("%d", statusCode),
+		Message: message,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+
+	encoder := json.NewEncoder(w)
+	if err := encoder.Encode(errRes); err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
